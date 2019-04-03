@@ -1,6 +1,7 @@
 package com.example.es;
 
 
+import com.alibaba.fastjson.JSONObject;
 import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.index.IndexResponse;
@@ -13,15 +14,19 @@ import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.query.RangeQueryBuilder;
 import org.elasticsearch.search.SearchHit;
+import org.elasticsearch.common.text.Text;
+import org.elasticsearch.search.fetch.subphase.highlight.HighlightBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -201,7 +206,44 @@ public class EsApplication {
 
 
 
+    /**
+     * 高亮查询
+     * @param name
+     * @param minAge
+     * @param maxAge
+     * @return
+     */
+    @GetMapping("/query/people/man/high")
+    @ResponseBody
+    public ResponseEntity highLighterQuery(@RequestParam(name = "name", required = false) String name){
 
+        QueryBuilder matchQuery= QueryBuilders.matchQuery("name",name);
+
+        HighlightBuilder highlightBuilder=new HighlightBuilder();
+        highlightBuilder.preTags("<h2>");
+        highlightBuilder.postTags("</h2>");
+        highlightBuilder.field("name");
+
+        SearchResponse response=this.client.prepareSearch("people")
+                .setTypes("man")
+                .setQuery(matchQuery)
+                .highlighter(highlightBuilder)
+                .execute().actionGet();
+        List<Man> result = new ArrayList<>();
+        for(SearchHit hit : response.getHits()){
+            Man man=new Man();
+            Map<String, Object> entityMap = hit.getSourceAsMap();;
+            if(!StringUtils.isEmpty(hit.getHighlightFields().get("name"))) {
+                Text[] text = hit.getHighlightFields().get("name").getFragments();
+                man.setName(text[0].toString());
+                man.setAge(Integer.parseInt(String.valueOf(entityMap.get("age"))));
+                man.setCountry(String.valueOf(entityMap.get("country")));
+            }
+            result.add(man);
+        }
+
+       return new ResponseEntity(result, HttpStatus.OK);
+    }
 
 
 
